@@ -1,6 +1,8 @@
+#include <SD.h>
+#include <SPI.h>
 #include <Wire.h>
-//#include <Adafruit_Sensor.h>
-//#include <Adafruit_LSM303_U.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_VS1053.h>
 
 #define arduinoPower 13
 #define pressurePin A0
