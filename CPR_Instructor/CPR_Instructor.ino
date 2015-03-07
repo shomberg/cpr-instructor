@@ -8,7 +8,7 @@
 #define pressurePin A0
 #define speakerPin
 #define buzzerPin 8
-#define nextPin 9
+#define nextPin 11
 
 // defines for mp3 breakout
 #define MP3_RESET 9
@@ -22,7 +22,9 @@
 #define instruct_msg_time 2000
 
 enum state_type {
+  initial_state,
   call_help,
+  instruct_all,
   instruct_call_help,
   instruct_lay_back,
   instruct_place_hands,
@@ -31,7 +33,7 @@ enum state_type {
   instruct_beat,
   pump_chest
 };
-state_type cpr_step = call_help;
+state_type cpr_step = initial_state;
 unsigned long state_start_time = millis();
 unsigned long step_start_time;
 
@@ -80,19 +82,28 @@ void setup() {
   mp3_player.dumpRegs();
 }
 
-
-
+bool first = true;
 
 void loop() {
   //loop iteration starts
   step_start_time = millis();
-
   //State transitions
   bool state_switched = false;
   switch (cpr_step) {
+    case initial_state:
+      cpr_step = call_help;
+      state_switched = true;
+      break;
     case call_help:
-      if (digitalRead(nextPin) == HIGH) {
-        cpr_step = instruct_call_help;
+      if (digitalRead(nextPin) == HIGH 
+      || (millis() - state_start_time > 1000 && mp3_player.stopped())) {
+        cpr_step = instruct_all;
+        state_switched = true;
+      }
+      break;
+    case instruct_all:
+      if (millis() - state_start_time > 1000 && mp3_player.stopped()) {
+        cpr_step = instruct_beat;
         state_switched = true;
       }
       break;
@@ -135,18 +146,29 @@ void loop() {
   }
   if (state_switched) {
     state_start_time = millis();
+    first = true;
+  }
+  else {
+    first = false;
   }
 
   //state actions
   switch (cpr_step) {
     case call_help:
+      if (!first) break;
       //speak
       Serial.println("Help! The person is having a heart attack.");
       Serial.println("Please come over and press the button for CPR instruction.");
       Serial.println();
+      mp3_player.startPlayingFile("1.mp3");
+      break;
+    case instruct_all:
+      if (!first) break;
+      Serial.println("instruct_all");
+      mp3_player.startPlayingFile("2.mp3");
       break;
     case instruct_call_help:
-      Serial.println("Call 991 before beginning CPR.");
+      Serial.println("Call 911 before beginning CPR.");
       Serial.println();
       break;
     case instruct_lay_back:
@@ -183,5 +205,7 @@ void loop() {
       //      noTone(buzzerPin);
       //      delay(550);
   }
-  delay(step_period - (millis() - step_start_time));
+  // Serial.println(step_period - (millis() - step_start_time));
+  // delay(step_period - (millis() - step_start_time));
+  delay(step_period);
 }
