@@ -1,8 +1,10 @@
+#include <SoftwareSerial.h>
 #include <SD.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_VS1053.h>
+#include <Adafruit_GPS.h>
 
 #define arduinoPower 13
 #define pressurePin A0
@@ -20,6 +22,9 @@
 #define buzzer_period 600
 #define step_period 10
 #define instruct_msg_time 2000
+#define feedback_period 3000
+#define good_pressure 2.85
+#define sensor_period 100
 
 enum state_type {
   initial_state,
@@ -31,7 +36,8 @@ enum state_type {
   instruct_push,
   instruct_continue,
   instruct_beat,
-  pump_chest
+  pump_chest,
+  pump_wrong
 };
 state_type cpr_step = initial_state;
 unsigned long state_start_time = millis();
@@ -84,6 +90,11 @@ void setup() {
 
 bool first = true;
 
+long pressure_monitor_period_begin = millis();
+int num_pressure_queries = 0;
+int num_good_pumps = 0;
+bool pumps_too_slow = false;
+
 void loop() {
   //loop iteration starts
   step_start_time = millis();
@@ -91,7 +102,7 @@ void loop() {
   bool state_switched = false;
   switch (cpr_step) {
     case initial_state:
-      cpr_step = call_help;
+      cpr_step = pump_chest;
       state_switched = true;
       break;
     case call_help:
@@ -143,6 +154,20 @@ void loop() {
         state_switched = true;
       }
       break;
+    case pump_chest:
+      if (pumps_too_slow) {
+        cpr_step = pump_wrong;
+        state_switched = true;
+        mp3_player.stopPlaying();
+      }
+      break;
+    case pump_wrong:
+      if (millis() - state_start_time > 500 && mp3_player.stopped()) {
+        cpr_step = pump_chest;
+        state_switched = true;
+        pumps_too_slow = false;
+      }
+      break;
   }
   if (state_switched) {
     state_start_time = millis();
@@ -151,6 +176,9 @@ void loop() {
   else {
     first = false;
   }
+
+  long elapsed = 0;
+  int query = 0;
 
   //state actions
   switch (cpr_step) {
@@ -167,43 +195,49 @@ void loop() {
       Serial.println("instruct_all");
       mp3_player.startPlayingFile("2.mp3");
       break;
-    case instruct_call_help:
-      Serial.println("Call 911 before beginning CPR.");
-      Serial.println();
-      break;
-    case instruct_lay_back:
-      //lay patient on the back
-      Serial.println("Lay the person on their back.");
-      Serial.println();
-      break;
-    case instruct_place_hands:
-      Serial.println("Place both hands on the center of the person's chest.");
-      Serial.println();
-      break;
-    case instruct_push:
-      Serial.println("Push hard as hard as you can. Use all of your body weight.");
-      Serial.println();
-      break;
-    case instruct_continue:
-      Serial.println("Continue to push a rate of 100 compressions a minute.");
-      Serial.println();
-      break;
-    case instruct_beat:
-      Serial.println("A beat will now begin playing. Make sure to push to the beat.");
-      Serial.println();
-      break;
     case pump_chest:
       //buzzer starts
-      if ((millis() - state_start_time) % buzzer_period < 50) {
-        digitalWrite(buzzerPin, HIGH);
-      } else {
-        digitalWrite(buzzerPin, LOW);
+      // if ((millis() - state_start_time) % buzzer_period < 50) {
+      //   digitalWrite(buzzerPin, HIGH);
+      // } else {
+      //   digitalWrite(buzzerPin, LOW);
+      // }
+
+      if (first) {
+        mp3_player.startPlayingFile("3.mp3");
+        Serial.println("pump_chest");
+        pressure_monitor_period_begin = millis();
       }
-      //buzzer beat 100/min
-      //     tone(buzzerPin, sound);
-      //      delay(50);
-      //      noTone(buzzerPin);
-      //      delay(550);
+
+      if (mp3_player.stopped()) {
+        mp3_player.startPlayingFile("3.mp3");
+      }
+
+      elapsed = millis() - pressure_monitor_period_begin;
+      query = (int)(elapsed / sensor_period);
+      if (query > num_pressure_queries) {
+        num_pressure_queries = query;
+        float pressure = analogRead(pressurePin) * (5.0 / 1023.0);
+        if (pressure > good_pressure) {
+          num_good_pumps++;
+        }
+      }
+      if (elapsed >= feedback_period) {
+        if (num_good_pumps >= 3) {
+          pumps_too_slow = false;
+        } 
+        else {
+          pumps_too_slow = true;
+        }
+        pressure_monitor_period_begin = millis();
+      }
+      break;
+    case pump_wrong:
+      if (first) {
+        mp3_player.startPlayingFile("4.mp3");
+        Serial.println("pump_wrong");
+      }
+      break;
   }
   // Serial.println(step_period - (millis() - step_start_time));
   // delay(step_period - (millis() - step_start_time));
