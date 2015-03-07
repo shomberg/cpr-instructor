@@ -10,6 +10,13 @@
 #define buzzerPin 8
 #define nextPin 9
 
+// defines for mp3 breakout
+#define MP3_RESET 9
+#define MP3_CS 10
+#define MP3_DCS 8
+#define MP3_CARDCS 4
+#define MP3_DREQ 3
+
 #define buzzer_period 600
 #define step_period 10
 #define instruct_msg_time 2000
@@ -27,6 +34,9 @@ enum state_type {
 state_type cpr_step = call_help;
 unsigned long state_start_time = millis();
 unsigned long step_start_time;
+
+Adafruit_VS1053_FilePlayer mp3_player =
+  Adafruit_VS1053_FilePlayer(MP3_RESET, MP3_CS, MP3_DCS, MP3_DREQ, MP3_CARDCS);
 
 //int sound = 250;
 //float pressureStrength;
@@ -52,12 +62,22 @@ unsigned long step_start_time;
 
 
 void setup() {
-  //Start serial at 9600 boud
+  //Start serial at 9600 baud
   Serial.begin(9600);
   Serial.println();
   //set up pins
   pinMode(buzzerPin, OUTPUT);
   pinMode(nextPin, INPUT);
+
+  if (!mp3_player.begin()) { // initialise the music player
+     Serial.println(F("Couldn't find VS1053, do you have the right pins defined?"));
+     while (1);
+  }
+  Serial.println(F("VS1053 found"));
+  SD.begin(MP3_CARDCS);
+  mp3_player.setVolume(0, 0);
+  mp3_player.useInterrupt(VS1053_FILEPLAYER_PIN_INT);
+  mp3_player.dumpRegs();
 }
 
 
